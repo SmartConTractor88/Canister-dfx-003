@@ -1,19 +1,40 @@
-type Listing = record {
-    title: text;
-    description: text;
-    starting_price: nat64;
-    sold: bool;
-    owner: principal;
-};
-
 type CreateListing = record {
     title: text;
     description: text;
     starting_price: nat64;
 };
 
+type Listing = record {
+    title: text;
+    description: text;
+    starting_price: nat64;
+    current_price: nat64;
+    sold: bool;
+    owner: principal;
+};
+
+type EditListing = record {
+    title: text;
+    description: text;
+    sold: bool;
+};
+
+type Error = variant {
+    AccessRejected;
+    ListingNotFound;
+    MinimalPriceNotMet;
+    ListingAlreadySold;
+    UpdateError;
+};
+
+type Result = variant {
+    ok: null;
+    err: Error;
+};
+
 service : {
+    create_listing: (CreateListing) -> (Listing);
     get_listing: (nat64) -> (opt Listing) query;
     get_listing_count: () -> (nat64) query;
-    create_listing: (CreateListing) -> (Listing);
+    edit_listing: (nat64, EditListing) -> (Result);
 }

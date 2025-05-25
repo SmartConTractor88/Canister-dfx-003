@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use std::result::Result;
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable, storable::Bound};
@@ -10,11 +11,27 @@ use std::borrow::Cow;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
+#[derive(CandidType, Deserialize)]
+enum Choice {
+    Bid,
+    Pass,
+}
+
+#[derive(CandidType)]
+enum Error {
+    AccessRejected,
+    ListingNotFound,
+    MinimalPriceNotMet,
+    ListingAlreadySold,
+    UpdateError,
+}
+
 #[derive(CandidType, Deserialize, Clone)]
 struct Listing {
     title: String,
     description: String,
     starting_price: u64,
+    current_price: u64,
     sold: bool,
     owner: Principal,
 }
@@ -24,6 +41,13 @@ struct CreateListing {
     title: String,
     description: String,
     starting_price: u64,
+}
+
+#[derive(CandidType, Deserialize, Clone)]
+struct EditListing {
+    title: String,
+    description: String,
+    sold: bool,
 }
 
 impl Storable for Listing {
@@ -51,6 +75,7 @@ thread_local! {
 
 #[ic_cdk::query]
 fn get_listing(id: u64) -> Option<Listing> {
+    let id = id - 1; // Adjusting for 0-based index
     LISTING_MAP.with(|p| p.borrow().get(&id))
 }
 
@@ -65,6 +90,7 @@ fn create_listing(input: CreateListing) -> Listing {
         title: input.title,
         description: input.description,
         starting_price: input.starting_price,
+        current_price: input.starting_price,
         sold: false,
         owner: ic_cdk::caller(),
     };
@@ -79,5 +105,39 @@ fn create_listing(input: CreateListing) -> Listing {
         });
 
         listing
+    })
+}
+
+#[ic_cdk::update]
+fn edit_listing(key: u64, listing: EditListing) -> Result<(), Error> {
+    LISTING_MAP.with(|p| {
+        let key = key - 1; // Adjusting for 0-based index
+        let old_listing_opt = p.borrow().get(&key);
+        let old_listing: Listing;
+
+        match old_listing_opt {
+            Some(value) => old_listing = value,
+            None => return Err(Error::ListingNotFound),
+        }
+
+        if ic_cdk::caller() != old_listing.owner {
+            return Err(Error::AccessRejected);
+        }
+
+        let value = Listing {
+            title: listing.title,
+            description: listing.description,
+            starting_price: old_listing.starting_price,
+            current_price: old_listing.current_price,
+            sold: listing.sold,
+            owner: old_listing.owner,
+        };
+
+        let result = p.borrow_mut().insert(key, value);
+
+        match result {
+            Some(_) => Ok(()),
+            None => Err(Error::UpdateError),
+        }
     })
 }
