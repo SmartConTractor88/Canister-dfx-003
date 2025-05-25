@@ -37,4 +37,5 @@ service : {
     get_listing: (nat64) -> (opt Listing) query;
     get_listing_count: () -> (nat64) query;
     edit_listing: (nat64, EditListing) -> (Result);
+    bid: (nat64, nat64) -> (Result);
 }

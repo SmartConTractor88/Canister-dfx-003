@@ -11,12 +11,6 @@ use std::borrow::Cow;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
-#[derive(CandidType, Deserialize)]
-enum Choice {
-    Bid,
-    Pass,
-}
-
 #[derive(CandidType)]
 enum Error {
     AccessRejected,
@@ -138,6 +132,30 @@ fn edit_listing(key: u64, listing: EditListing) -> Result<(), Error> {
         match result {
             Some(_) => Ok(()),
             None => Err(Error::UpdateError),
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn bid(key: u64, price: u64) -> Result<(), Error> {
+    let adjusted_key = key - 1;
+
+    LISTING_MAP.with(|p| {
+        let mut map = p.borrow_mut();
+        match map.get(&adjusted_key) {
+            Some(mut listing) => {
+                if listing.sold {
+                    return Err(Error::ListingAlreadySold);
+                }
+                if price <= listing.current_price {
+                    return Err(Error::MinimalPriceNotMet);
+                }
+
+                listing.current_price = price;
+                map.insert(adjusted_key, listing);
+                Ok(())
+            }
+            None => Err(Error::ListingNotFound),
         }
     })
 }
